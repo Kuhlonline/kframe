@@ -1,0 +1,133 @@
+<?php
+
+	class dataObject extends data {
+
+		protected $objectId			= 0;
+		protected $data 	 		= array();
+		protected $catalog			= array();
+		protected $parent			= null;
+		protected $children			= array();
+		protected $cache			= array();
+
+		public function __construct($table, $id, $idField = null, array $enumerate = array()) {
+			parent::__construct($table, $idField);
+
+			$this->objectId		= $id;
+
+			if (!$enumerate) {
+				if ($this->objectId) $this->data = $this->record($this->objectId);
+			} else {
+				$this->data 	= $enumerate;
+			}
+
+			if ($this->data) $this->loadedRecord = true;
+		}
+
+		public function __get($key) {
+			return (isset($this->data[$key]))
+				? $this->data[$key]
+				: null
+			;
+		}
+
+		public function __set($key, $value) {
+			$update		= array($key => $value);
+			$updated	= $this->update($this->objectId, $update);
+
+			if ($updated) {	
+				$this->data 	= $this->record($this->objectId);
+				$this->log[]	= "Updated `$key` with '$value'";
+			} else {
+				$this->errors[]	= "Could not update `$key` with '$value'";
+			}
+
+		}
+
+		public function __unset($key) {
+			$update 	= array($key => 'NULL');
+			$updated 	= $this->update($this->objectId, $update);
+
+			if ($updated) {	
+				$this->data 	= $this->record($this->objectId);
+				$this->log[]	= "Unset `$key` with 'NULL'";
+			} else {
+				$this->errors[]	= "Could not unset `$key` with 'NULL'";
+			}
+		}
+
+		public function __invoke(array $update = array()) {
+			if ($update) {
+				$this->update($this->objectId, $update);
+				$this->data 	= $this->record($this->objectId);
+			}
+
+			return $this->data;
+		}
+
+		public function __toString() {
+			return $this->tableName;
+		}
+
+		public function uid() {
+			return md5($this->tableName.$this->objectId);
+		}
+
+		public function attachTo(dataObject $parent) {
+			$this->parent 	= $parent;
+			$this->parent->addChild($this, $this->objectId);
+			return $this->parent;
+		}
+
+		public function child($id) {
+			return (isset($this->children[$id]))
+				? $this->children[$id]
+				: false
+			;
+		}
+
+		public function children() {
+			return $this->children();
+		}
+
+		public function addChild(dataObject $child, $id) {
+			$this->children[$id]	= $child;
+		}
+
+		public function propagateChildren($fromTable, $onField, $clearFirst = true, $asObject = null) {
+			if (!$this->loadedRecord) return false;
+			if ($clearFirst) $this->children = array();
+
+			$provider	= new data($fromTable, $onField);
+			$results 	= $provider->selectById($this->objectId);
+			$uniqueKey	= 'id';
+
+
+			if ($results === false) {
+				$this->errors[]		= "Error retrieving Children from $fromTable on $onField";
+				return false;				
+			} elseif (!$results) {
+				$this->log[]		= "No Children found in $fromTable on $onField";
+				return array();
+			}
+
+			$objectName				= ($asObject) ? $asObject : 'dataObject';
+			$objectName 			= (class_exists($asObject)) ? $asObject : 'dataObject';
+
+			foreach ($results as $record) {
+				$child = new $objectName(
+					$fromTable, 
+					$record[$uniqueKey], 
+					$uniqueKey, 
+					$record
+				);
+
+				$this->catalog[$fromTable][]	= $record;
+				$child->attachTo($this);
+			}
+
+			return $this->children;
+		}
+
+	}
+
+?>

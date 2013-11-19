@@ -1,0 +1,123 @@
+<?php
+
+	class htmlOutputHandler {
+
+		function __construct() {
+		}
+
+		public function handleHtmlOutput($id = 0, $data = null, $error = false, $eventName = null) {
+
+			
+			if (is_object($data)) {
+				if (method_exists($data, 'render')) {
+					$data->render($data);
+				} elseif (method_exists($data, '__toString')) {
+					print $this->returnElement("$data", $id, $error);
+				} else {
+					print $this->returnElement($data, $id, $error);
+				}
+			} elseif (is_array($data)) {
+				if ($this->arrayDepth($data) == 1) {
+					print $this->buildList($data, $this->isAssoc($data));
+				//} elseif ($this->arrayDepth($data) >= 2) {
+				//	print $this->buildTable($data, $this->isAssoc($data));
+				} else {
+					print $this->returnElement($data, $id, $error);
+				}
+			} else {
+				print $this->returnElement($data, $id, $error);
+			}
+		}
+
+		private function returnElement($input, $id, $error = false) {
+			return ($error) 
+				? "<strong id=\"$id\" class=\"error\" style=\"color:#a81010;\">Error: $input</strong>"
+				: "<span id=\"$id\" class=\"response\">".print_r($input, true)."</span>"
+			;
+		}
+
+		private function arrayDepth(array $array) {
+		    $max_depth = 1;
+
+		    foreach ($array as $value) {
+		        if (is_array($value)) {
+		            $depth = $this->arrayDepth($value) + 1;
+
+		            if ($depth > $max_depth) {
+		                $max_depth = $depth;
+		            }
+		        }
+		    }
+
+		    return $max_depth;
+		}
+
+		private function isAssoc($arr) {
+		    return array_keys($arr) !== range(0, count($arr) - 1);
+		}
+
+
+
+		private function buildList(array $list, $withKeys = false) {
+			
+			$html 	= ($withKeys) ? "<dl class=\"dl-horizontal\">" : "<ul>";
+
+			foreach ($list as $key => $value) {
+
+				$line 	= ($withKeys)
+					? "<dt>$key</dt><dd>$value</dd>"
+					: "<li>$value</li>"
+				;
+
+				$html .= $line;
+			}
+
+			$html .= ($withKeys) ? "</dl>" : "</ul>";
+			return $html;
+		}
+
+
+		/**
+		 *
+		 * array(0=>array(0=>'a',1=>'b'), 1=>array(), 2=>array())
+		 * array(0=>array('a'=>1,'b'=>2), 1=>array(), 2=>array())
+		 * 
+		 * array('key'=>array(0=>'a',1=>'b'),'key'=>array(),'key'=>array())
+		 * array('key'=>array('a'=>1,'b'=>2),'key'=>array(),'key'=>array())
+		 * 
+		 * @param  array   $data      [description]
+		 * @param  boolean $withTypes [description]
+		 * @return [type]             [description]
+		 */
+		private function buildTable(array $data, $assc = false) {
+
+			if ($assc) {
+				$html 	= "<table class=\"table\">";
+				$html  .= "<thead>";
+
+			} else {
+
+				$firstRow 	= $data[0];
+				unset($data[0]);
+
+				$html = "<table class=\"table\">";
+				$html.= "<thead><tr><th>".implode("</th><th>", $firstRow)."</th></tr></thead>";
+				$html.= "<tbody>";
+
+				foreach ($data as $index => $row) {
+
+					$html.="<tr><td>".implode("</td><td>", $row)."</td></tr>";
+
+				}
+
+				$html.="</tbody>";
+				$html.="</table>";
+
+			}
+
+			return $html;
+		}
+
+	}
+
+?>

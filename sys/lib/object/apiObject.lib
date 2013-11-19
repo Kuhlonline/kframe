@@ -1,0 +1,91 @@
+<?php
+
+	class apiObject {
+
+		private $buffer;
+		protected $tableName;
+
+		function __construct($tableName) {
+			$this->tableName 	= $tableName;
+		}
+
+		public function render() {
+			print_r($this->buffer);
+			return $this->buffer;
+		}
+
+		public function get($type, $data = null) {
+			
+			if (isset($data[0])) {
+				$record 		= new dataObject($this->tableName, $data[0]);
+				$result 		= $record();
+				if (!$record->loadedRecord) return false;
+			} else {
+				$table 			= new data($this->tableName);
+				$result			= $table(array('status'=>'E'));
+				if (!$table->loadedRecord) return false;
+			}
+
+			$this->buffer 		= $result;
+			return $this->buffer;
+		}
+
+		public function put($type, $data) {
+			$args 			= $this->cleanData($data);
+			$table			= new data($this->tableName);
+			if (!$table)	return false;
+
+			$this->buffer 	= $table->insert($args);
+			return $this->buffer;
+		}
+
+		public function post($type, $data) {
+			$args 	= $this->cleanData($data);
+
+			if (isset($args['id'])) {
+				$record 		= new dataObject($this->tableName, $args['id']);
+				if (!$record)	return 'e0:No Record';
+
+				$updated 		= $record($args);
+				$this->buffer 	= ($updated == false) ? "e0:Could not update {$args['id']}" : $updated;
+			} else {
+				$this->buffer 	= 'e0:No ID';
+			}
+			
+			return $this->buffer;
+		}
+
+		public function delete($type, $data) {
+			$this->buffer =  "DELETE";
+			return $this;
+		}
+
+		protected function cleanData(array &$data) {
+			global $restrictions;
+
+			$param 		= array();
+			$arguments	= array();
+
+			foreach ($data as $key => $value) {
+				if (is_numeric($key) and is_numeric($value) and ($key == 0)) {
+					$arguments['id']	= $value;
+				} elseif (is_numeric($key)) {
+					$param[]			= $value;
+				} else {
+					$arguments[$key]	= $value;
+				}
+			}
+
+			if (isset($arguments['email']) and isset($arguments['password'])) {
+				$token 					= md5(sha1($arguments['email']).md5($arguments['password']));
+				$arguments['token']		= $token;
+				unset($arguments['password']);
+			}
+
+			$data 		= $param;
+			return $arguments;
+		}
+
+	}
+
+?>

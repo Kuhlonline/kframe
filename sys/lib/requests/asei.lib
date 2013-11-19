@@ -1,0 +1,684 @@
+<?php
+
+	/**
+	 * ASEI :: Server-Side
+	 * Application Server Event Interface
+	 *
+	 * Handles server-side application events with client-side
+	 * event push notifications.
+	 *
+	 * Notice:
+	 * ASEI does not support legacy browsers such as Internet Explorer
+	 * Currently Internet Explorer 10 still does not support SSE technology
+	 * so working configurations are currently limited to Firefox, Chromium,
+	 * Opera, Safari and any other web standards compliant browser.	
+	 *
+	 *
+	 *
+	 *@author Geoffrey L. Kuhl
+	 *@package asei
+	 *@subpackage server-side
+	 *@version 0.2.6
+ 	 */
+
+
+
+	/**
+	 Functional Wrappers
+	 */
+	
+
+	/**
+	 * Register Handler
+	 * 
+	 * Attach an event handler to event, or Listen for an event.
+	 * The handler should be able to be called statically, so the
+	 * parent class object does not need to be instansiated.
+	 *
+	 * <code>
+	 * 	// Your Declaration
+	 * 	class myObject {
+	 * 		public static function myMethod(array $eventData = array()) {}
+	 * 	}
+	 *
+	 *  // Usage
+	 * 	registerHandler('some_event_name', myObject', 'myMethod');
+	 * </code>
+	 * 
+	 * @param  string $eventName Name of event to listen for
+	 * @param  string $object Name of object class to use
+	 * @param  string $method Name of object method to call
+	 * @return array Event Handlers
+	 */
+	function registerHandler($eventName, $object, $method) {
+		global $asei;
+		return $asei->registerHandler($eventName, $object, $method);
+	}
+
+
+
+	/**
+	 * Raise Event
+	 *
+	 * Raises an event which calls all listening/registered handlers 
+	 * and passes incoming event data to the handler.
+	 *
+	 * <code>
+	 * 	raiseEvent('some_event_name', array('mydata'=>'this'));
+	 * </code>
+	 * 
+	 * @param  string 	$eventName Name of the event to raise
+	 * @param  array  	$data Data to pass to handlers
+	 * @param  integer  $retry Retry time
+	 * @return array 	array('server'=>array(), 'client'=>array());
+	 */
+	function raiseEvent($eventName, array $data = array(), $retry = false) {
+		global $asei;
+		return $asei->raiseEvent($eventName, $data, $retry);
+	}
+
+
+
+	/**
+	 * Register Object
+	 * Only instansiated class objects can be registerd with the ASEI
+	 * to be called against for security reasons. This keep ASEI from
+	 * being able to call any class method, and only call ones the
+	 * server-side code says is okay.
+	 * 
+	 * @param  string 	$objectName Name of object to be registered
+	 * @param  object	$object     Object to catalog
+	 * @return           
+	 */
+	function registerObject($objectName, &$object) {
+		global $asei;
+		return $asei->registerObject($objectName, $object);
+	}
+
+
+
+	/**
+	 ASEI Class
+	 */
+	
+
+
+	/**
+	 * ASEI
+	 * Class asei
+	 */
+	class asei {
+
+
+		/**
+		 * Date/Time String Format
+		 */
+		const dateTime_format		= "l, F jS \o\\f Y \a\\t g:i:s A T";
+
+
+		/**
+		 * Refresh Construct Event Interval in milliseconds
+		 * Default is 10000 or 10 Seconds
+		 */		
+		const refreshMainPoll		= 10000;
+
+
+		/**
+		 * Storage for incoming AJAX requests
+		 * @var array
+		 */
+		protected $postedRequest	= array();
+
+
+		/**
+		 * Storage for Registered event handlers
+		 * @var array
+		 */
+		protected $serverHandlers	= array();
+
+
+		/**
+		 * Response/Request Type
+		 * JSON, XML, HTML, STREAM
+		 * @var string
+		 */
+		protected $type 			= null;
+
+
+		/**
+		 * Is a valid request? Has all the
+		 * variables required to process
+		 * @var boolean
+		 */
+		protected $validRequest		= false;
+
+
+		/**
+		 * Data injected by an external source
+		 * at the time of instansiation aswhen
+		 * an AJAX request is made from the
+		 * client.
+		 * @var array
+		 */
+		protected $pushData			= array();
+
+
+		/**
+		 * Storage for event raising logs
+		 * @var array
+		 */
+		private $logs				= array();
+
+
+		/**
+		 * Private storage for allowable objects
+		 * that can be called when events are raised
+		 * or from the api
+		 * @var array
+		 */
+		private $objects			= array();
+
+
+
+		/**
+		 * Construct
+		 * @param array [$pushData] Data injected by an external source
+		 *                          at the time of instansiation aswhen
+		 *                          an AJAX request is made from the
+		 *                          client.
+		 */
+		function __construct(array $pushData = array()) {
+
+			if ($pushData) {
+				$valid	= (isset($pushData['valid'])) 	? $pushData['valid'] 	: true;
+				$type 	= (isset($pushData['type']))	? $pushData['type']		: 'json';
+			} else {
+				$valid	= true;
+				$type 	= 'json';
+			}
+
+			$this->validRequest	= $valid;
+			$this->type 		= $type;
+			$this->pushData		= $pushData;
+		}
+
+
+
+		/**
+		 * Process Request
+		 * Checks for incoming AJAX requests and
+		 * processes them if needed
+		 * @return void
+		 */
+		public function processRequest($denied = false) {
+
+			if ($denied) {
+				$this->send("Access Denied", true);
+				exit();
+			}
+
+			$stream 	= $this->isStreamRequest();
+			$handled 	= $this->handleRequest($this->pushData);
+			
+
+			if (!$handled and $stream) {
+				// $this->pushEvent('aseiPoll', $this->pollEventData(), self::refreshMainPoll);
+			} else {
+				exit();
+			}
+		}
+
+
+
+		/**
+		 * Is Stream Request
+		 * @return boolean true or false is a event-stream request
+		 */
+		function isStreamRequest() {
+
+			if ($_SERVER['HTTP_ACCEPT'] == 'text/event-stream') {
+				header('Content-Type: text/event-stream');
+				header('Cache-Control: no-cache');
+				return true;
+			}
+
+			return false;
+		}
+
+
+
+		/**
+		 * Start-up Event Data
+		 * @return array Returns ASEI information
+		 */
+		private function pollEventData() {
+			return array(
+				'ASEI'			=> 'By Geoffrey L. Kuhl',
+				'version'		=> self::version,
+				'repolled'		=> microtime(true),
+				'dateTime'		=> date(self::dateTime_format),	
+				'uptime'		=> `uptime`,
+				'accept'		=> $_SERVER['HTTP_ACCEPT']
+			);
+		}
+
+
+
+		/**
+		 * Register Object
+		 * Only instansiated class objects can be registerd with the ASEI
+		 * to be called against for security reasons. This keep ASEI from
+		 * being able to call any class method, and only call ones the
+		 * server-side code says is okay.
+		 * 
+		 * @param  string 	$objectName Name of object to be registered
+		 * @param  object	$object     Object to catalog
+		 * @return object Set by input
+		 */
+		public function registerObject($name, &$object) {
+			$this->objects[$name] = &$object;
+			return $this->objects[$name];
+		}
+
+
+
+		/**
+		 * Method Call
+		 * Calls a method on an object. Attempts to create an instane of the object first
+		 * if possible
+		 *
+		 * @param  string  $objectName
+		 * @param  string  $methodName
+		 * @param  array   $arguments
+		 * @param  boolean $status
+		 * @return mixed Return of Call
+		 */
+		private function methodCall($objectName, $methodName, array $arguments = array(), &$status = true) {
+
+			$object = null;
+
+			if (array_key_exists($objectName, $this->objects)) {
+				$object = &$this->objects[$objectName];
+				$status = true;
+			}
+
+			if (!$object) {
+				$status = false;
+				return "$objectName->$methodName(".implode(',', $arguments).") could not be found or executed";
+			}
+
+			try {
+				$result = call_user_func_array(array($object, $methodName), $arguments);
+				$status = ($result !== false);
+
+				if (!is_array($result) and (substr($result, 0, 3) == 'e0:')) {
+					$status 	= false;
+					$result 	= substr($result, 3);
+				}
+
+				return $result;
+			} catch (Exception $e) {
+				$status			= false;
+				return $e->getMessage();
+			}
+		}
+
+
+
+		/**
+		 * Gather Post
+		 * Clone Post data to private variable for later use
+		 * 
+		 * @return boolean True if post data was retrieved
+		 */
+		private function gatherPost(array $data = array()) {
+			if ($data) {
+				$this->postedRequest = $data;
+			} elseif (!count($_POST)) {
+				return false;
+			} else {
+				$this->postedRequest = $_POST;
+			}
+			
+			return true;
+		}
+
+
+
+		/**
+		 * Handle Request
+		 * Handle incoming POST request (XHR) from
+		 * jQuery.post() Call
+		 *
+		 * @return boolean True if POST data exists
+		 */
+		private function handleRequest(array $pushData = array()) {
+			if (!$this->gatherPost($pushData)) return false;
+			if (!$this->validRequest) {
+				$this->send('Invalid Request. No Class or Method defined', true);
+				return false;
+			}
+			
+			$post 		= $this->postedRequest;
+			$objName	= (isset($post['class'])) 	? $post['class'] 	: null;
+			$funcName	= (isset($post['method']))	? $post['method']	: null;
+			$funcParam	= array();
+
+			if (!$funcName or !$objName) {
+				$this->send('No class or function defined', true);
+			} else {
+				unset($post['class']);
+				unset($post['method']);
+				$funcParam	= $post;
+			}
+
+			if (!class_exists($objName) or !method_exists($objName, $funcName)) {
+				$this->send("Class '$objName' or function '$funcName' not defined", true);
+			} elseif ($objName == 'asei') {
+				$this->send("Cannot make calls to myself", true);
+			}
+
+			$status     = true;
+			$result		= $this->methodCall($objName, $funcName, $funcParam, $status);
+			$this->send($result, ($status == false));
+
+			return true;
+		}
+
+
+
+		/** 
+		 * Send
+		 *
+		 * Output router for server-to-client repsonses
+		 * which calls a private method to handle any
+		 * given type supported by ASEI.
+		 * 
+		 * @param  mixed 	$data 	Output Data, Object, String, Error
+		 * @param  boolean 	$error 	True if throwing and error
+		 * @return void
+		 */
+		private function send($data, $error = false) {
+
+			switch (strtolower($this->type)) {
+
+				default:
+				case 'json':
+					$this->sendJSON($data, $error);
+				break;
+
+				case 'xml':
+					$this->sendXML($data, $error);
+				break;
+
+				case 'html':
+					$this->sendHTML($data, $error);
+				break;
+
+				case 'stream':
+					$this->sendStream($data, $error);
+				break;
+
+			}
+		}
+
+
+
+		/**
+		 * Send XML
+		 * 
+		 * Sends XML encoded data for output or for error for use
+		 * with XML-RPC when client requests are made
+		 * including GET, PUT, POST, DELETE RPC commands.
+		 * 
+		 * @param  array  	$data  Output Data, Object, String, Error
+		 * @param  boolean	$error True if throwing and error
+		 * @return void
+		 */
+		private function sendXML($data, $error = false) {
+			/** Create Standard Return Struction **/
+			$return 	= array(
+				'event_id'	=> uniqid(),
+				'result'	=> ($error) ? null : $data,
+				'request'	=> $this->postedRequest,
+				'timestamp'	=> date(self::dateTime_format),
+				'error'		=> ($error) ? $data : false
+			);
+
+			/** Reverse Keys and Values for XML **/
+			$mrg = array();
+			$this->reverseKVA($data, $mrg);
+
+			$xml = new SimpleXMLElement('<resi/>');
+			array_walk_recursive($mrg, array($xml, 'addChild'));
+			print $xml->asXML();
+			if ($error == true) exit();
+		}
+
+		private function reverseKVA(array $data, array &$output) {
+			foreach ($data as $key => $value) {
+				if (is_array($value)) {
+					$output['list_'.$key] = array();
+					$this->reverseKVA($value, $output['list_'.$key]);
+				} else {
+					if (is_numeric($value)) {
+						$output['item_'.$value]	= $key;
+					} else {
+						$output[$value]	= $key;
+					}
+				}
+			}
+		}
+
+
+
+		/**
+		 * Send JSON
+		 * 
+		 * Sends JSON encoded data for output or for error for use
+		 * with AJAX when client requests are made
+		 * including GET, PUT, POST, DELETE ajax commands.
+		 * 
+		 * @param  array 	$data 	Output Data, Object, String, Error
+		 * @param  boolean 	$error 	True if throwing and error
+		 * @return void
+		 */
+		private function sendJSON($data, $error = false) {
+
+			/** Create Standard Return Struction **/
+			$return 	= array(
+				'event_id'	=> uniqid(),
+				'result'	=> ($error) ? null : $data,
+				'request'	=> $this->postedRequest,
+				'timestamp'	=> date(self::dateTime_format),
+				'error'		=> ($error) ? $data : false
+			);
+
+			print json_encode($return);
+			if ($error == true) exit();
+		}
+
+
+
+		/**
+		 * Send HTML
+		 *
+		 * Sends text/html formatted response to the client for
+		 * GET, POST, PUT, and DELTE commands made from the UX
+		 * 
+		 * @param  array 	$data 	Output Data, Object, String, Error
+		 * @param  boolean 	$error 	True if throwing and error
+		 * @return void
+		 */
+		private function sendHTML($data, $error = false) {
+			$id 	= uniqid();
+			$this->raiseEvent('renderHtml', array($id, $data, $error));
+			if ($error) exit();
+		}
+
+		
+
+		/**
+		 * Send Stream
+		 *
+		 * Sends stream, message transport formated response
+		 * to the client for EventSource connections made
+		 * by the client.
+		 *
+		 * @param mixed 	$data 	Data to send to the client
+		 * @param boolean	$error 	Set to True if is error
+		 * @return void
+		 */
+		private function sendStream($data, $error = false) {
+			$id 	= uniqid();
+
+			/** Create Standard Return Struction **/
+			$return 	= array(
+				'event_id'	=> $id,
+				'result'	=> ($error) ? null : $data,
+				'request'	=> $this->postedRequest,
+				'timestamp'	=> date(self::dateTime_format),
+				'error'		=> ($error) ? $data : false
+			);
+
+			$this->pushEvent('response', $return);
+			if ($error == true) exit();
+			//return $return;
+		}
+
+
+
+		/**
+		 * Call Handler
+		 * Calls all server-side event handlers listening
+		 * for given event
+		 * 
+		 * @param  string $eventName
+		 * @param  array  $data
+		 * @return array  List of logs from handler calls
+		 */
+		private function callHandler($eventName, array $data) {
+
+			$handlers 		= (isset($this->serverHandlers[$eventName]))
+				? $this->serverHandlers[$eventName]
+				: array()
+			;
+
+			foreach ($handlers as $handler) {
+				$object 	= $handler['object'];
+				$method 	= $handler['method'];
+
+				//if (!class_exists($object))				continue;
+				//if (!method_exists($object, $method))	continue;
+
+				/** Log Data **/
+				$this->logs['eventName'][]	= "Raised Server Event $object->$method([".count($data)."])";
+
+				$append		= array('eventName' => $eventName);
+				$cleanData	= (array_merge($data, $append));
+				$return 	= $this->methodCall($object, $method, $cleanData);
+			}
+
+			return (isset($this->logs['eventName'])) ? $this->logs['eventName'] : array();
+		}
+
+
+
+		/**
+		 * Push Event
+		 * Sends a stream for client-side event raising
+		 * 
+		 * @param  string  $eventName
+		 * @param  array   $data
+		 * @param  integer $retry
+		 * @return array 	List of logs from event
+		 */
+		public function pushEvent($eventName, $data = array(), $retry = 10000) {
+			/** Encode Data **/
+			$data 			= json_encode($data);
+
+			/** No retry **/
+			if ($retry === false) {
+				$retry 		= ((((60 * 60) * 24) * 365) * 1000);
+			}
+
+			/** Log Data **/
+			$this->logs['eventName'][]	= "Pushed Client Event $eventName([".count($data)."])";
+			
+			/** Prepare Structure **/
+			$strPackage		= "retry: $retry".PHP_EOL;
+			$strPackage    .= "event: $eventName".PHP_EOL;
+			$strPackage    .= "data: $data".PHP_EOL;
+
+			/** Send **/
+			//header('Content-Type: text/event-stream');
+			//header('Cache-Control: no-cache');
+			print $strPackage.PHP_EOL;
+			flush();
+
+			/** Log Data **/
+			$this->logs['eventName'][]	= "Sent:".PHP_EOL.$strPackage;
+
+			return $this->logs['eventName'];
+		}
+
+
+
+		/**
+		 * Register Handler
+		 * 
+		 * Attach an event handler to event, or Listen for an event.
+		 * The handler should be able to be called statically, so the
+		 * parent class object does not need to be instansiated.
+		 *
+		 * <code>
+		 * 	// Your Declaration
+		 * 	class myObject {
+		 * 		public static function myMethod(array $eventData = array()) {}
+		 * 	}
+		 *
+		 *  // Usage
+		 * 	registerHandler('some_event_name', myObject', 'myMethod');
+		 * </code>
+		 * 
+		 * @param  string $eventName Name of event to listen for
+		 * @param  string $object Name of object class to use
+		 * @param  string $method Name of object method to call
+		 * @return array Event Handlers
+		 */
+		public function registerHandler($eventName, $object, $method) {
+			$this->serverHandlers[$eventName][]	= array(
+				'object'	=> $object,
+				'method'	=> $method,
+				'event'		=> $eventName
+			);
+
+			return $this->serverHandlers[$eventName];
+		}
+
+
+
+		/**
+		 * Raise Event
+		 *
+		 * Raises a server-side event which calls all listening/registered 
+		 * handlers and passes incoming event data to the handler.
+		 *
+		 * <code>
+		 * 	raiseEvent('some_event_name', array('mydata'=>'this'));
+		 * </code>
+		 * 
+		 * @param  string 	$eventName Name of the event to raise
+		 * @param  array  	$data Data to pass to handlers
+		 * @param  integer  $retry Retry time
+		 * @return array 	array('server'=>array(), 'client'=>array());
+		 */
+		public function raiseEvent($eventName, array $data = array(), $retry = 10000) {
+			$serverCalls	= $this->callHandler($eventName, $data);
+			return $serverCalls;
+		}
+
+	}
+
+
+?>

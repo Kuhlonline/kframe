@@ -1,0 +1,31 @@
+<section>
+	<div class="vh-200 hidden-xs">&nbsp;</div>
+</section>
+<section>
+	<div class="container">
+		<div class="row">
+			<div class="col-sm-3 col-md-3 col-lg-3">
+				<div class="gray-40 tile-lg" onclick="onServer.page('public/page', '#tile2');">
+					<h3 class="underlined">There</h3>
+					<div class="tile-body">
+						Here
+					</div>
+				</div>
+			</div>
+			<div class="col-sm-3 col-md-3 col-lg-3">
+				<div class="gray-40 tile-lg" id="tile2">Tile</div>
+			</div>
+			<div class="col-sm-3 col-md-3 col-lg-3">
+				<div class="gray-40 tile-lg" id="tile3">Tile</div>
+			</div>
+			<div class="col-sm-3 col-md-3 col-lg-3">
+				<div class="gray-40 tile-lg">Tile</div>
+			</div>
+		</div>
+	</div>
+</section>
+<script>
+	function handler(result) {$('#tile3').html(result.time)}
+
+	_('./request/test/stream/').listenFor('response', handler);
+</script>

@@ -1,0 +1,243 @@
+<?php
+
+    class data {
+    
+        protected $tableName        = null;
+        protected $log              = array();
+        protected $errors           = array();
+
+        private $idField            = null;
+        public $buffer             = null;
+
+        public $loadedRecord        = false;
+        
+        function __construct($tableName, $idField = null) {
+            $this->tableName    = $tableName;
+            $this->idField      = ($idField) ? $idField : 'id';
+        }
+        
+        function __get($id) {
+            return $this->record($id);
+        }
+        
+        function __invoke($request) {
+
+            if (is_array($request)) {
+                return $this->records($request);
+            } elseif ($request) {
+                return $this->query($request);
+            }
+
+            return false;
+        }
+
+        function __toString() {
+            return $this->tableName;
+        }
+        
+        function record($id) {
+            $result = $this->selectById($id);
+            return (isset($result[0])) ? $result[0] : $result;
+        }
+        
+        function records(array $data) {
+            return $this->selectWhere($data);
+        }
+        
+        protected function update($id, array $data) {
+            global $sqlConnection;
+
+            $table      = $this->tableName;
+            $update     = "UPDATE `$table` SET";
+            $keys       = array_keys($data);
+            $lastKey    = $keys[count($keys)-1];
+            $values     = null;
+
+            foreach ($data as $key => $value) {
+                $values  .= " `$key` = '$value'";
+                if ($key != $lastKey) $values .= ',';
+            }
+
+            $sql        = "$update $values WHERE `{$this->idField}` = '$id'";
+            $sqlConnection->query($sql);
+            
+            if ($sqlConnection->errno) {
+                $this->errors[]     = $sqlConnection->error;
+                return false;
+            }
+            
+            $this->log[]            = "Updated Record #$id";
+            return true;
+        }
+        
+        public function insert(array $data) {
+            global $sqlConnection;
+            
+            $table      = $this->tableName;
+            $keys       = array_keys($data);
+            $values     = array_values($data);
+            $records    = array();
+            $strKey     = "`". implode("`,`", $keys) ."`";
+            $strVal     = "'". implode("','", $values) ."'";
+            $sql        = "INSERT INTO `$table` ($strKey) VALUES ($strVal);";
+
+            $this->buffer           = $sql;
+            $err                    = false;
+            $result                 = $sqlConnection->query($sql);
+            
+            if ($sqlConnection->errno) {
+                $this->errors[]     = $sqlConnection->error;
+                $result             = "e0:".$sqlConnection->error;
+                $err                = true;
+            } else {
+                $this->log[]        = "Inserted Record";
+            }
+
+            return ($sqlConnection->insert_id and !$err) ? $sqlConnection->insert_id : $result;
+        }
+        
+        protected function delete() {
+            
+        }
+        
+        protected function replace() {
+
+        }
+        
+        protected function selectById($id) {
+            global $sqlConnection;
+
+            $table          = $this->tableName;
+            $records        = array();
+
+            if (is_array($id)) {
+                $ids        = "'".implode("','", $id)."'";
+                $selectStr  = "SELECT * FROM `$table` WHERE `{$this->idField}` IN ($ids);";
+            } else {
+                $selectStr  = "SELECT * FROM `$table` WHERE `{$this->idField}` = '$id';";
+            }
+
+            $this->buffer   = $selectStr;
+            $result         = $sqlConnection->query($selectStr);
+
+            if ($sqlConnection->errno) {
+                $this->errors[]     = $sqlConnection->error;
+                return false;
+            } 
+
+            while ($row = $result->fetch_assoc()) {
+                $rid        = (!isset($row['id'])) ? $row['id'] : null;
+
+                if ($rid) {
+                    $records[$rid]  = $row;
+                } else {
+                    $records[]      = $row;
+                }
+            }
+            
+            $count              = count($records);
+            $this->log[]        = "Selected $count Records";
+            if ($records)       $this->loadedRecord = true;
+
+            return $records;
+        }
+
+        protected function selectWhere(array $where, $append = null) {
+            global $sqlConnection;
+
+            $table          = $this->tableName;
+            $whereStr       = $this->where($where);
+            $selectStr      = "SELECT * FROM $table $whereStr $append;";
+            $this->buffer   = $selectStr;
+            $result         = $sqlConnection->query($selectStr);
+
+            if ($sqlConnection->errno) {
+                $this->errors[]     = $sqlConnection->error;
+                return false;
+            }
+
+            while ($row = $result->fetch_assoc()) {
+                $rid        = (!isset($row['id'])) ? $row['id'] : null;
+                
+                if ($rid) {
+                    $records[$rid]  = $row;
+                } else {
+                    $records[]      = $row;
+                }
+            }
+
+            $count              = count($records);
+            $this->log[]        = "Selected $count Records";
+            if ($records)       $this->loadedRecord = true;
+            
+            return $records;
+        }
+
+        protected function query($sql, $ignoreResults = false, array &$return = array()) {
+            global $sqlConnection;
+
+            $this->buffer           = $query;
+            $result                 = $sqlConnection->query($query);
+
+            if ($sqlConnection->errno) {
+                $this->errors[]     = $sqlConnection->error;
+                return false;
+            }
+
+            if (!$ignoreResults) {
+
+                while ($row = $result->fetch_assoc()) {
+                    $rid        = (!isset($row['id'])) ? $row['id'] : null;
+                    
+                    if ($rid) {
+                        $records[$rid]  = $row;
+                    } else {
+                        $records[]      = $row;
+                    }
+                }
+
+                $count              = count($records);
+                $this->log[]        = "Selected $count Records";
+                if ($records)       $this->loadedRecord = true;
+
+                return $records;
+            }
+
+            return true;
+        }
+        
+
+        /**
+         * Where
+         * 
+         *@example
+         * $data = array('key' => 'value');
+         * or
+         * $data = array('key'=> array('operator', 'value'));
+         * where operator is '=', '<', '>', '<=', '>=', 'like', etc
+         */
+        protected function where(array $data, $or = false) {
+            $strWhere   = "WHERE ";
+            $keys       = array_keys($data);
+            $lastKey    = $keys[count($keys)-1];
+            $switch     = ($or) ? 'OR' : 'AND';
+
+            foreach ($data as $key => $set) {
+
+                if (is_array($set)) {
+                    $operator   = (isset($set[0])) ? $set[0] : '=';
+                    $value      = (isset($set[1])) ? $set[1] : null;
+
+                    $strWhere   .= "`$key` $operator '$value'";
+                } else {
+                    $strWhere   .= "`$key` = '$set'";
+                }
+
+                if ($key != $lastKey) $strWhere .= " $switch ";
+            }
+
+            return $strWhere;
+        }
+    }
+
+?>

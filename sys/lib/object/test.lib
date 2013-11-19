@@ -1,0 +1,15 @@
+<?php
+
+	class test {
+
+		function __construct() {
+
+		}
+
+		public function get() {
+			$str = 'Today is '.date('l, F jS \o\\f Y \a\\t g:i A T');
+			return array('time'=>$str);
+		}
+	}
+
+?>
