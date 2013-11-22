@@ -93,7 +93,9 @@
                 $this->log[]        = "Inserted Record";
             }
 
-            return ($sqlConnection->insert_id and !$err) ? $sqlConnection->insert_id : $result;
+            $iid = $sqlConnection->insert_id;
+
+            return ($iid and !$err) ? $iid : $result;
         }
         
         protected function delete() {

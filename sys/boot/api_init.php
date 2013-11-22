@@ -22,6 +22,13 @@
 
 
 	/**
+	 * Timezone
+	 */
+	date_default_timezone_set("America/New_York");
+
+
+
+	/**
 	 * Get Libraries
 	 */
 	loadLibraries();
@@ -42,18 +49,17 @@
     if (isset($config[$group][$class])) {
     	$method 	= strtoupper($restData['method']);
     	$view 		= $config[$group][$class]['view'];
-    	$denied 	= ($config[$group][$class][$method] == false);
+    	$allowed 	= ($config[$group][$class][$method] != false);
     } else {
-    	$denied 	= false;
+    	$allowed 	= false;
     	$view 		= 'self';
     }
 
     $restrictions	= array(
     	'view'		=> 'self',
-    	'access'	=> $denied,
+    	'access'	=> $allowed,
     	'group'		=> $group
     );
-
 
 
     /** 
@@ -67,7 +73,7 @@
 	 * If request is permitted, connect to database
 	 * and register api request class objects
 	 */
-	if (!$denied) {
+	if ($allowed) {
 		
 		if (!connectToDatabase()) {
 			throw new Exception("Could not Connect to database");
@@ -76,13 +82,6 @@
 
 		registerObjects();
 	}
-
-
-
-	/**
-	 * Register API objects
-	 */
-	//registerObjects();
 
 
 
@@ -146,12 +145,14 @@
 		global $config;
 
 		$objects = (isset($config['objects'])) ? $config['objects'] : null;
-		foreach ($objects as $name => $type) {
-			$object 	= new $type();
-			if (!$object) continue;
 
-			registerObject($name, $object);
+		
+		foreach ($objects as $name => $type) {
+			$obj 		= new $type();
+			registerObject($name, $obj);
+			$obj 		= null;
 		}
+		
 	}
 
 

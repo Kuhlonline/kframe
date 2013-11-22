@@ -62,7 +62,7 @@ function asei(source) {
 	 * Validate Source
 	 * @type String
 	 */
-	if (typeof this.source === "undefined") this.source = 'request/';
+	if (typeof this.source === "undefined") this.source = 'api/';
 
 
 
@@ -164,7 +164,8 @@ function asei(source) {
 
 		/** jQuery POST Request **/
 		$.post(this.source, data, function(data) {
-			callback(data);
+			//var parsed = JSON.parse(data);
+			callback(data.result);
 		}, "json");
 
 		/* Return Self */
@@ -204,6 +205,75 @@ function asei(source) {
 
 		/* Return Self */
 		return this;	
+	}
+
+	this.define			= function(setVar) {
+		/** jQuery ajax Request **/
+		$.ajax({
+			url: this.source,
+			type: 'GET',
+			data: {},
+			success: function(data) {
+				var parsed 	= JSON.parse(data);
+				setVar 		= parsed.result;
+				alert(setVar);
+			}
+		});
+
+		/* Return Self */
+		return this;
+	}
+
+	this.takeAction 	= function(func) {
+		/** jQuery ajax Request **/
+		$.ajax({
+			url: this.source,
+			type: 'GET',
+			data: {},
+			success: function(data) {
+				var parsed = JSON.parse(data);
+				func(parsed.result, parsed);
+			}
+		});
+
+		/* Return Self */
+		return this;
+	}
+
+	this.showIn			= function(element, what) {
+		/** jQuery ajax Request **/
+		$.ajax({
+			url: this.source,
+			type: 'GET',
+			data: {},
+			success: function(data) {
+				var parsed = JSON.parse(data);
+				if (what != '') {
+					$(element).html(parsed.result[what]);
+				} else {
+					$(element).html(parsed.result);
+				}
+			}
+		});
+
+		/* Return Self */
+		return this;
+	}
+
+	this.setValue		= function(element) {
+		/** jQuery ajax Request **/
+		$.ajax({
+			url: this.source,
+			type: 'GET',
+			data: {},
+			success: function(data) {
+				var parsed = JSON.parse(data);
+				$(element).val(parsed.result);
+			}
+		});
+
+		/* Return Self */
+		return this;
 	}
 
 

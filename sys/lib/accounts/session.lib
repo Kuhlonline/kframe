@@ -1,0 +1,90 @@
+<?php
+
+	class session {
+
+		protected $signedIn		= false;
+		protected $sessionId;
+
+		function __construct() {
+			$this->sessionId 	= uniqid(md5($_SERVER['REMOTE_IP']));
+
+			session_start($this->sessionId);
+			$this->detectSessionAccount();
+		}
+
+		public function get($type, $data = null) {
+			return array('username'=>$_SESSION['account']['username']);
+		}
+
+		public function post($type, $data = null) {
+			$email 		= (isset($data['email'])) 		? $data['email'] 	: null;
+			$password 	= (isset($data['password']))	? $data['password'] : null;
+			if (!$email or !$password) return array('status'=>'invalid');
+
+			$token 			= md5(sha1($email).md5($password));
+			$userAccount	= new user($token);
+			$data 			= $userAccount();
+			$valid 			= (isset($data['id']) and $data['id'] > 0);
+
+			if ($valid) {
+				$this->createUserSession($token);
+				return array('status'=>'valid');
+			}
+			
+			$emailAcct			= $this->emailCheck($email);
+			if ($emailAcct())	return array('status'=>'registered');
+		
+
+			$accounts 		= new data('users');
+			$token 			= md5(sha1($email).md5($password));
+			$created 		= ($accounts->insert(array(
+				'email'			=> $email,
+				'token'			=> $token,
+				'created'		=> date('Y-m-d H:i:s'),
+				'last_ip'		=> $_SERVER['REMOTE_ADDR'],
+				'username'		=> $email,
+				'last_signin'	=> date('Y-m-d H:i:s'),
+				'status'		=> 'E'
+			)));
+
+			if ($created) {
+				$this->createUserSession($token);
+				return array('status'=>'created');
+			}
+		
+			return array('status'=>'unregistered');
+		}
+
+		public function delete($type, $data = null) {
+			@session_destroy();
+			$this->createUserSession('guest');
+			return array('status'=>'signed out');
+		}
+
+		private function createUserSession($token) {
+			$userAccount			= new user($token);
+			$_SESSION['account']	= $userAccount();
+		}
+
+		private function emailCheck($email) {
+			$email = new dataObject('users', $email, 'email');
+			return $email;
+		}
+
+		private function detectSessionAccount() {
+			global $userAccount;
+
+			if (isset($_SESSION['account']['token'])) {
+				$token 	= $_SESSION['account']['token'];
+			} else {
+				$token	= 'guest';
+			}
+
+			$userAccount 			= new user($token);
+			$_SESSION['account']	= $userAccount();
+			$this->signedIn			= (($token != 'guest') and ($token == $userAccount->token));
+		}
+
+	}
+
+?>

@@ -1,4 +1,4 @@
 RewriteEngine On
-RewriteRule ^request(.*)$ sys/boot/api.php?rest=$1 [L]
+RewriteRule ^api(.*)$ sys/boot/api.php?rest=$1 [L]
 RewriteRule ^(.*)/$ sys/boot/page.php?page=$1 [L]
 #RewriteRule ^index.html$ sys/boot/page.php?page=main [L]

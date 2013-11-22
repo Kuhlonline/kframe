@@ -1,0 +1,11 @@
+member landing.phtml
+
+<button id="btn_signout" class="btn btn-default">Sign Out</button>
+
+<script>
+	$('#btn_signout').click(function() {
+		_('api/session').delete({}, function(result) {
+			onServer.page('public/home', '#page');
+		});
+	});
+</script>

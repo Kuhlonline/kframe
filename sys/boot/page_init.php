@@ -31,6 +31,23 @@
      * Rest Data
      */
     $group			= $config['groups']['default'];
+	$view 			= 'page';
+
+
+    /** Permissions **/
+    global $restrictions;    
+
+    if (isset($_SERVER['HTTP_X_REQUESTED_WITH'])) {
+    	$allowed = ($_SERVER['HTTP_X_REQUESTED_WITH'] == 'XMLHttpRequest');
+    } else {
+		$allowed 	= false;
+	}
+
+    $restrictions	= array(
+    	'view'		=> $view,
+    	'access'	=> $allowed,
+    	'group'		=> $group
+    );
 
 
 
@@ -45,12 +62,18 @@
 	 * If request is permitted, connect to database
 	 * and register api request class objects
 	 */
-	if (!connectToDatabase()) {
-		throw new Exception("Could not Connect to database");
+	if ($allowed) {
+		if (!connectToDatabase()) {
+			throw new Exception("Could not Connect to database");
+			exit();
+		}
+
+		registerObjects();
+	} else {
+		header("HTTP/1.0 404 Not Found");
+		flush();
 		exit();
 	}
-
-	registerObjects();
 
 
 

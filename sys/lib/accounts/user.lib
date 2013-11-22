@@ -1,0 +1,11 @@
+<?php
+
+	class user extends dataObject {
+
+		function __construct($token) {
+			parent::__construct('users', $token, 'token');
+		}
+
+	}
+
+?>

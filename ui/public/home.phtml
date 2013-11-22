@@ -1,0 +1,85 @@
+<section>
+	<div class="row">
+
+		<div class="col-md-8 col-md-offset-2">
+			<div class="padded-30 gray-60 top-part">
+				<h3 class="smashed">
+					Welcome
+					<span class="username"></span>
+					<small class="pull-right time"></small>
+				</h3>
+			</div>
+			<div class="padded-30 gray-20 bottom-part">
+				<div class="row">
+					<div class="col-md-6 col-md-offset-3">
+						<section id="msg">
+							Please enter your email address and k34 password to continue. It doesn't
+							matter if you do not have a user with us, we'll create one. Just fill 
+							out your email address and chose a password to enter below. Then click
+							Sign In to continue.
+						</section>
+						<br/>
+						<br/>
+						<section>
+							<div class="input-group">
+	  							<span class="input-group-addon">
+	  								<span class="glyphicon glyphicon-user"></span>
+	  							</span>
+								<input type="email" class="form-control" id="email" name="email" placeholder="Email">
+							</div>
+						</section>
+						<br/>
+						<section>
+							<div class="input-group">
+	  							<span class="input-group-addon">
+	  								<span class="glyphicon glyphicon-lock"></span>
+	  							</span>
+								<input type="password" class="form-control" id="password" name="password" placeholder="Password">
+							</div>
+						</section>
+						<br/>
+						<section class="r">
+							<button class="btn btn-default" type="button" id="btn_signin">Sign In</button>
+						</section>
+					</div>
+				</div>
+				
+			</div>
+		</div>
+
+	</div>
+</section>
+<script>
+	/** Time **/
+	_('api/date/stream').listenFor('response', function(result) {
+		$('.datetime').html(result.full)
+		$('.time').html(result.time)
+	});
+
+	/** Username **/
+	_('api/session').showIn('.username', 'username');
+
+	/** Submit **/
+	$('#btn_signin').click(function(event) {
+		var data = {
+			email: $('#email').val(),
+			password: $('#password').val()
+		};
+
+		_('api/session').update(data, function(result) {			
+			
+			if (result.status == 'unregistered') {
+				onServer.page('public/register', '#page');
+			} else if (result.status == 'valid') {
+				onServer.page('member/home', '#page');
+			} else if (result.status == 'registered') {
+				onServer.page('public/wrong_password', '#page');
+			} else if (result.status == 'created') {
+				onServer.page('member/created', '#page');
+			} else {
+				$('#msg').html('You did something wrong. Try Again.');
+			}
+
+		});
+	});
+</script>

@@ -275,8 +275,8 @@
 		 * @param  object	$object     Object to catalog
 		 * @return object Set by input
 		 */
-		public function registerObject($name, &$object) {
-			$this->objects[$name] = &$object;
+		public function registerObject($name, $object = null) {
+			$this->objects[$name] = $object;
 			return $this->objects[$name];
 		}
 
@@ -298,7 +298,7 @@
 			$object = null;
 
 			if (array_key_exists($objectName, $this->objects)) {
-				$object = &$this->objects[$objectName];
+				$object = $this->objects[$objectName];
 				$status = true;
 			}
 
@@ -419,6 +419,10 @@
 					$this->sendStream($data, $error);
 				break;
 
+				case 'text':
+					$this->sendText($data, $error);
+				break;
+
 			}
 		}
 
@@ -495,6 +499,15 @@
 			);
 
 			print json_encode($return);
+			if ($error == true) exit();
+		}
+
+		private function sendText($data, $error = false) {
+
+			/** Create Standard Return Struction **/
+			$return = implode("\n", $data);
+
+			print $return;
 			if ($error == true) exit();
 		}
 

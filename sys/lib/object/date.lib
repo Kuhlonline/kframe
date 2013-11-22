@@ -1,0 +1,19 @@
+<?php
+
+	class date {
+
+		public function get() {
+			$full 	= date('D, M jS Y \@ g:ia T');
+			$time	= date('g:ia T');
+			$date	= date('D, M jS Y');
+
+			return array(
+				'time'=>$time,
+				'date'=>$date,
+				'full'=>$full
+			);
+		}
+
+	}
+
+?>
